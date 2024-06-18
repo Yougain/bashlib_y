@@ -1,0 +1,1236 @@
+#!/bin/env bash
+
+
+if [ -d "/data/data/com.termux/files" ]; then
+	IS_TERMUX=1
+	R="/data/data/com.termux/files/usr"
+	if [ "`stat -c "%i" $R`" != "`stat -c "%i" $R/usr`" ];then
+		sudo mount --bind $R $R/usr
+	fi
+else
+	R=""
+fi
+T="$R/tmp"
+VT="$R/var/tmp"
+
+if ! [[ "$PATH" =~ (^|:)$R/usr/share/bashlib_y($|:) ]];then
+	export PATH="$R/usr/share/bashlib_y:$PATH"
+fi
+
+if [ -z "$___CMD_PATH___" ];then
+	___CMD_PATH___="`realpath $0`"
+fi
+
+__CMD_PATH__(){
+	echo "$___CMD_PATH___" 
+}
+
+
+__CMD_NAME__(){
+	echo "${0##*/}"
+}
+
+
+__CMD_DIR__(){
+	local tmp=$(__CMD_PATH__)
+	echo "${tmp%/*}"
+}
+
+
+__FILE__() {
+	local sn
+	if [ -n "$1" ];then
+		sn=$((1 + $1))
+	else
+		sn=1
+	fi
+	local f="`readlink -f "${BASH_SOURCE[$sn]}"`"
+	if [[ "${f##*/}" =~ [^\-\./A-Za-z0-9_] ]]; then
+		echo -e "$error"Cannot use path name, $f"$normal". >&2
+		echo -e "$info"Alphabitical/numeric characters and '/', '.', '⧵' are usable for path name when using bashlib_y"$normal" >&2
+		return
+	fi
+	echo "$f"
+}
+
+__FILE_PATH__() {
+	__FILE__
+}
+
+
+if [ -e "$(__CMD_DIR__)/bashlib_y" -a "`readlink -f $(__CMD_DIR__)/bashlib_y`" != "$(__FILE__)" ];then
+	if [ ! -d "$(__CMD_DIR__)/bashlib_y" ];then
+		source $(__CMD_DIR__)/bashlib_y
+	fi
+else
+
+
+function env_var(){
+	local ln
+	local tmp
+	declare -p |grep -E '^declare -[A-Za-z-]* [A-Za-z_][A-Za-z0-9_]*'| while read ln; do
+		ln=${ln#declare -* }
+		ln=${ln%%=*}
+		tmp="`declare -p $ln 2>/dev/null`"
+		if [ "$?" = "0" ];then
+			echo $ln
+		fi
+	done|sort|uniq
+}
+
+
+__ORG_EVAR__="`env_var`"
+
+
+error="\033[41m\033[33mERROR    :\033[m \033[31m"
+warning="\033[43m\033[31mWARNING:\033[m \033[33m"
+info="\033[46m\033[34mINFO     :\033[m \033[36m"
+debug="\033[42m\033[34mDEBUG     :\033[m \033[32m"
+plain="\033[m"
+normal="\033[m"
+
+
+__FILE_NAME__(){
+	local f="`__FILE__ 1`"
+	echo "${f##*/}"
+}
+
+
+if [ -z "$SSH_PARAM_LIST" ];then
+	if ! [[ $0 =~ / ]];then
+		if [ -e ./$(__FILE_NAME__) ];then
+			if [ $(realpath ./$(__FILE_NAME__)) != $(__FILE__) ];then
+				. ./$(__FILE_NAME__)
+				exit $?
+			fi
+		fi
+	fi
+fi
+
+
+__FILE_DIR__(){
+	local f="`__FILE__ 1`"
+	echo "${f%/*}"
+}
+
+
+__SOURCE_PATH__(){ # path of link if symbolic linked to __FILE__
+	local f="`realpath "${BASH_SOURCE[1]}"`"
+	if [[ "$f" =~ [^\-\./A-Za-z0-9_] ]]; then
+		echo -e "$error"Cannot use path name, $f"$normal". >&2
+		echo -e "$info"Alphabitical/numeric characters and '/', '.', '⧵' are usable for path name when using bashlib_y"$normal" >&2
+		return
+	fi
+	echo "$f"
+}
+
+
+__SOURCE_NAME__(){
+	local f="`__SOURCE_PATH__`"
+	echo "${f##*/}"
+}
+
+
+
+PATH=$R/usr/share/$(__FILE_NAME__)/:$PATH
+
+
+case $(__SOURCE_NAME__) in
+	bashlib_y)
+		;;
+	args)
+		. "`get_calling_func_info args`"
+		return
+		;;
+	*)
+		echo -e "$error"Cannot use source name, "'"$(__SOURCE_NAME__)"'". Exiting.$normal >&2
+		return
+esac
+
+
+__DIR__() {
+	dirname "$(realpath "${BASH_SOURCE[1]}")"
+}
+
+
+function split(){
+	local IFS="$3"
+	eval "$1=(\$2)"
+}
+
+
+_shellsplit(){
+	local s
+	while (($#));do
+		eval "\$target+=(\"\$1\")"
+		shift
+	done
+}
+
+shellsplit(){
+	local target=$1
+	_shellsplit $2
+}
+
+
+boot_id(){
+	local uptime_seconds
+	if [ -z "$IS_TERMUX" ];then
+		uptime_seconds=$(cat /proc/uptime | awk '{print $1}')
+	else
+		uptime_seconds=$(stat -c %Y $R/var/run/sshd.pid)
+	fi
+	local current_seconds=$(date +%s%N)
+	current_seconds=${current_seconds%???????}
+	uptime_seconds=${uptime_seconds%???}${uptime_seconds: -2}
+	local boot_time=$((current_seconds - uptime_seconds))
+	local f="`__FILE_NAME__`"
+	local idf
+	local idft
+	local dif
+	mkdir -p $T/$f
+	sudo -n chmod 777 $T/$f 2> /dev/null
+	mkdir -p $T/$f/boot_id
+	sudo -n chmod 777 $T/$f/boot_id 2> /dev/null
+	for idf in $T/$f/boot_id/*; do
+		if [ -e "$idf" ];then
+			idft=${idf##*@}
+			dif=$((idft - boot_time))
+			if ((-1000 < dif && dif < 1000));then
+				export BOOT_ID=${idf##*/}
+				return
+			fi
+		fi
+	done
+	# first use after boot
+	idf=$T/$f/boot_id/`hostname -f`-$RANDOM$RANDOM@$boot_time
+	touch $idf
+	sudo -n chmod 777 $idf 2> /dev/null
+	export BOOT_ID=${idf##*/}
+	local f="`__FILE_NAME__`"
+	local t
+	# cleanup old tmp dir
+	for d in $T/$f/*; do
+		for d2 in $d/*; do
+			for tmpd in $d2/*; do
+				if [ -d "$tmpd" ];then
+					t=${tmpd##*@}
+					if [[ $t =~ ^[0-9]+$ ]]; then
+						if ((t < boot_time)); then
+							rm -rf $tmpd
+						fi
+					else
+						sudo -n rm -rf $tmpd 2>/dev/null
+					fi
+				fi
+			done
+		done
+	done
+}
+
+
+tmp_dir(){
+	boot_id
+	local f="`__FILE_NAME__`"
+	SUPPORT_LIB_CONTENT="`cat $(__FILE__)`"
+	SUPPORT_LIB_MTIME="`stat $(__FILE__) -c %Y`"
+	SUPPORT_LIB_NAME=$f
+	SOURCES_LOADED=()
+	local start_time=$(cat /proc/$$/stat | awk '{print $22}')
+	start_time=$((${BOOT_ID##*@} + start_time))
+	mkdir -p $T/$f/*
+	local pt
+	for d in $T/$f/*; do
+		for d2 in $d/*; do
+			for tmpd in $d2/*-$$@*; do
+				if [ -d "$tmpd" ];then
+					pt=${tmpd##*@}
+					dif=$((pt - start_time))
+					if ((-100 < dif && dif < 100));then
+						SCRIPT_TMP_DIR=$tmpd
+						SCRIPT_ID=${tmpd##*-}
+						SCRIPT_VAR_DIR=$VT/$f
+						# already initialized
+						return 1
+					fi
+				fi
+			done
+		done
+	done
+	mkdir -p $T/$f
+	sudo -n chmod 777 $T/$f 2> /dev/null
+	mkdir -p $T/$f/${0##*/}
+	sudo -n chmod 777 $T/$f/${0##*/} 2> /dev/null
+	SCRIPT_TMP_DIR=$T/$f/${0##*/}/`date +"%y-%m-%d_%H-%M-%S.%N%z"`-$$@$start_time
+	SCRIPT_ID=$$@$start_time
+	if ! mkdir -p $SCRIPT_TMP_DIR; then
+		echo -e "$error"Cannot create script temporary directory. Terminated.$normal >&2
+		exit 1
+	fi
+	SCRIPT_VAR_DIR=$VT/$f
+	if ! mkdir -p $SCRIPT_TMP_DIR; then
+		sudo -n chmod 777 $SCRIPT_VAR_DIR 2> /dev/null
+		echo -e "$error"cannot create script dir$normal >&2
+		exit 1
+	fi
+	if [ -z "$IS_TERMUX" -a -n "$SUDO_USER" -a -e "/etc/passwd" ];then
+		if grep -E "^$SUDO_USER:" "/etc/passwd" > /dev/null; then
+			chown -R "$SUDO_USER" $SCRIPT_TMP_DIR
+			chown -R "$SUDO_USER" $SCRIPT_VAR_DIR
+		fi
+	elif [ -n "$IS_TERMUX" -a -n "$SUDO_USER" ];then
+		chown -R "$SUDO_USER" $SCRIPT_TMP_DIR
+		chown -R "$SUDO_USER" $SCRIPT_TMP_DIR
+	fi
+	local lnk=$SCRIPT_TMP_DIR/../latest
+	if [ -n "$DEBUG" ];then
+		echo -e "$debug"\$SCRIPT_TMP_DIR = $SCRIPT_TMP_DIR"$normal" >&2
+	fi
+	rm -f $lnk
+	if [ -n "$DEBUG" ];then
+		ln -sf $SCRIPT_TMP_DIR $lnk
+		if [ -z "$IS_TERMUX" -a -n "$SUDO_USER" -a -e "/etc/passwd" ];then
+			chown "$SUDO_USER" $lnk
+		elif [ -n "$IS_TERMUX" -a -n "$SUDO_USER" ];then
+			chown "$SUDO_USER" $lnk
+		fi
+	fi
+	return 0
+}
+
+
+
+initialize_support_lib(){
+	if [ -z "$SSH_PARAM_LIST" ];then
+		declare -A SSH_PARAM_LIST
+		if [ -n "$DEBUG" ];then
+			declare -p SSH_PARAM_LIST >&2
+		fi
+		tmp_dir
+		ret=$?
+		if [ -n "$DEBUG" ];then
+			declare -p SCRIPT_ID >&2
+		fi
+		return $ret
+	else
+		return 1
+	fi
+}
+
+if initialize_support_lib; then
+	if [ -n "$DEBUG" ];then
+		echo "initializing support lib ..." >&2
+		declare -p SCRIPT_ID >&2
+	fi
+	if ! declare -p SSH_PARAM_LIST 2>/dev/null; then
+		declare -A SSH_PARAM_LIST
+		if [ -n "$DEBUG" ];then
+			declare -p SSH_PARAM_LIST >&2
+		fi
+	fi
+_black="0"
+_red="1"
+_green="2"
+_yellow="3"
+_blue="4"
+_purple="5"
+_magenta="5"
+_cyan="6"
+_white="7"
+
+
+allColors="black red green yellow blue purple magenta cyan white"
+
+function capitalize(){
+	local B
+	local F
+	B=`echo -n "${1:0:1}" | tr "[:lower:]" "[:upper:]"`
+	F="${B}${1:1}"
+	shift
+	echo -n $F $@
+}
+
+function errmsg_n(){
+	echo -en $error"$@"$plain >&2
+}
+
+
+shellquote(){
+	local sc="`declare -p $1`"
+	if [[ $sc =~ ^declare\ [^\ ]+\ $1=(.*)$ ]];then
+		echo ${BASH_REMATCH[1]}
+	fi
+}
+
+function errmsg(){
+	errmsg_n "$@"
+	if [ -n "$ERRMSG" ];then
+		ERRMSG="$ERRMSG"'
+'"$@"
+	else
+		ERRMSG="$@"
+	fi
+	echo -ne "\n" >&2
+}
+
+
+err(){
+	errmsg "$@"
+}
+error(){
+	errmsg "$@"
+}
+
+
+function info_n(){
+	echo -ne $info$@$plain >&2
+}
+function info(){
+	info_n $@
+	echo -ne "\n" >&2
+}
+
+
+function warning_n(){
+	echo -ne "$warning""$@"$plain  >&2
+}
+function warning(){
+	warning_n "$@"
+	echo -ne "\n" >&2
+}
+
+function warn(){
+	warning_n "$@"
+	echo -ne "\n" >&2
+}
+
+warn_n(){
+	warning_n "$@" >&2
+}
+
+
+
+function deb(){
+	if [ -n "$DEBUG" ];then
+		echo -e $debug$@$plain >&2
+	fi
+}
+debug(){
+	deb "$@"
+}
+
+
+if [ ! -e "$VT/bashlib_y/allColors" -o "`cat $VT/bashlib_y/allColors 2> /dev/null`" != "`echo $allColors`" ];then
+	mkdir -p -m 0777 $VT
+	mkdir -p -m 0777 $VT/bashlib_y
+	echo $allColors > $VT/bashlib_y/allColors
+	echo -n > $VT/bashlib_y/allColors.src
+	for col in `echo $allColors`; do
+		echo '
+			'$col'="\033[3$'_$col'""m"
+			function '$col'_n(){
+				echo -ne "\033[3$'_$col'""m''$@''$plain"
+			}
+			function '$col'(){
+				'$col'_n $@"\n"
+			}
+			function bg'`capitalize $col`'_n(){
+				echo -ne "\033[4$'_$col'""m''$@''$plain"
+			}
+			function bg'`capitalize $col`'(){
+				bg'`capitalize $col`'_n $@"\n"
+			}
+		' >> $VT/bashlib_y/allColors.src
+		for bgCol in $allColors; do
+			echo '
+				function '$col'Bg'`capitalize $bgCol`'_n(){
+					echo -ne "\033[3$'_$col'""m\033[4$'_$bgCol'""m''$@''$plain"
+				}
+				function '$col'Bg'`capitalize $bgCol`'(){
+					'$col'Bg'`capitalize $bgCol`'_n $@
+				}
+			' >> $VT/bashlib_y/allColors.src
+		done
+	done
+else
+	. $VT/bashlib_y/allColors.src
+fi
+
+function exit_if_err(){
+	if (("$#"));then
+		errmsg "$@"
+	fi
+	if [ -n "$ERRMSG" ];then
+		exit 1
+	fi
+}
+
+function die(){
+	if [ -n "$1" ]; then
+		errmsg $@
+	fi
+	exit 1
+}
+
+
+
+declare -A LOCAL_FUNCS
+declare -A SCRIPT_FILES
+
+
+emerge_file_content(){
+	local f="`readlink -f $1`"
+	local sid
+	if [ -e "$f" ];then
+		if [ -z "${SCRIPT_FILES[$f]}" ];then
+			sid=SCRIPT_FILE_$RANDOM$RANDOM$RANDOM
+			#dbv $sid
+			SCRIPT_FILES["$f"]=$sid
+			local ln
+			eval "
+				$sid=()
+				local i=0
+				local IFS=""
+				while read -r ln;do
+					$sid+=(\"\$ln
+\")
+					i=\$((i + 1))
+				done < $f
+			"
+		else
+			sid=${SCRIPT_FILES[$f]}
+		fi
+	fi
+}
+
+
+get_calling_line(){
+	local frame=(`caller 1`)
+	local f="${frame[2]}"
+	local lno="${frame[0]}"
+	emerge_file_content "$f"
+	local sid=${SCRIPT_FILES[$f]}
+	$1="`eval 'echo -E ${'"$sid"'['"$((lno - 1))"']}'`"
+}
+
+
+for_sudo_user(){
+	if [ -n "$SUDO_USER" -a `id -u`=0 ];then
+		local pth
+		local rp
+		local rpe
+		local ac
+		local us
+		local fn=$(__FILE_NAME__)
+		local fnn=${#fn}
+		for pth in "$@";do
+			rp="$(realpath "$pth")"
+			fnn=
+			if [ "${rp:0:$((fnn + 6))}" = "$T/$fn/" ]; then
+				while true;do
+					ac="$(stat -c %a "$rp")"
+					us="$(stat -c %u "$rp")"
+					if [ "$us"=0 ];then
+						local acb="${ac:$((#ac - 3)):3}"
+						if [ "$acb"=755 -o "$acb"=644 ];then
+							chown $SUDO_USER:$SUDO_USER $rp
+						else
+							break
+						fi
+					fi
+					rp=$(dirname "$rp")
+					if [ rp="$T" ];then
+						break
+					fi
+				done
+			fi
+		done
+	fi
+}
+
+
+dbv(){
+	if [ -n "$DEBUG" ];then
+		local position
+		local caption
+		if [ "$1" = "--position" ];then
+			shift
+			position="$1"
+			shift
+			if [ "$1" = "--caption" ];then
+				shift
+				caption="$1"
+				shift
+			fi
+			if [ -n "$caption" ] && [[ $caption =~ \`|\$|\(\( ]] ;then
+				deb $position "'$yellow"$caption"$green'" = "'$cyan""$@""$green'"
+			else
+				deb $position $cyan$@
+			fi
+		else
+			local IFS=" "
+			local frame=(`caller 0`)
+			local f="`readlink -f ${frame[2]}`"
+			local lno="${frame[0]}"
+			local ln
+			local sid
+			if [ -n "$SSH_ID" ];then
+				local tdir="$SCRIPT_TMP_DIR/$SSH_ID/file_transferred/"
+				local tdsz=${#tdir}
+				if [ "$f" = "$SCRIPT_TMP_DIR/$SSH_ID/do_content" -o "$f" = "$SCRIPT_TMP_DIR/$SSH_ID/env" -o "$f" = "$SCRIPT_TMP_DIR/$SSH_ID/main" ];then
+					if [ -z "${SCRIPT_FILES[$f]}" ];then
+						sid=__ssh_dbv_sid__${f##*/}$SSH_ID$RANDOM
+						SCRIPT_FILES["$f"]=$sid
+						local line_conv
+						eval "
+							$sid=()
+							local i=0
+							local IFS=
+							while read -r ln;do
+								if [ \"\${ln:0:6}\" = \"#line \" -o \"\${ln:0:6}\" = \"#line	\" ];then
+									line_conv=\"\$((i + 1)) \${ln:6}\"
+								fi
+								$sid+=(\"\$ln
+			\")
+								i=\$((i + 1))
+							done < $f
+						"
+						if [ -n "$line_conv" ];then
+							local difL=$(($(echo "$line_conv" | awk '{print $2}') - $(echo "$line_conv" | awk '{print $1}')))
+							local altF=$(echo "$line_conv" | awk '{print $4}')
+							eval "difL_$sid=$difL"
+							eval "altF_$sid=$altF"
+						fi
+					fi
+				elif [ "${f:0:$tdsz}" = "$SCRIPT_TMP_DIR/$SSH_ID/file_transferred/" ];then
+					local s
+					for s in ${!SCRIPT_FILES[@]}; do
+						if [ "${s##*/}" = "${f##*/}" ];then
+							sid=${SCRIPT_FILES[$s]}
+							break
+						fi
+					done
+				fi
+			else
+				emerge_file_content "$f"
+				sid=${SCRIPT_FILES["$f"]}
+			fi
+			if [ -n "$sid" ];then
+				local difL_sid=difL_$sid
+				local rlno
+				if [ -n "${!difL_sid}" ];then
+					local difL=${!difL_sid}
+					local altF_sid=altF_$sid
+					rlno=$((lno + difL))
+					f=${!altF_sid}
+				else
+					rlno=$lno
+				fi
+				ln="`eval 'echo -E ${'"$sid"'['"$((lno - 1))"']}'`"
+				ln="${ln#*dbv }"
+				ln="${ln%%;*}"
+				if [[ $ln =~ ^(.*)[\ \
+\	]+$ ]]; then
+					ln="${BASH_REMATCH[1]}"
+				fi
+				if [[ $ln =~ \`|\$|\(\( ]] ;then
+					deb ${f##*/}:$rlno "'$yellow"${ln#*dbv }"$green'" = "'$cyan""$@""$green'"
+				else
+					deb ${f##*/}:$rlno $cyan$@
+				fi
+			else
+				deb ${f##*/}:$lno $cyan$@
+			fi
+		fi
+	fi
+}
+
+dbv loaded $(__FILE__)
+
+_get_block_devs(){
+	local f
+	for f in "$1"/*; do
+		if [ -d "$f" ];then
+			_get_block_devs "$f"
+		elif [ -b "$f" ];then
+			blockDevs+=("${f#/dev/}")
+		fi
+	done
+}
+
+
+_rm_all(){
+	if [ ! -e "$1" ];then
+		err "'$1' does not exist."
+		return 1
+	fi
+	local d
+	local dlen
+	local ln
+	local blockDevs
+	local f
+	local l
+	if [ -d "/data/data/com.termux/files" ];then
+		while read ln; do
+			if [ "${ln:0:14}" = "/dev/block/dm-" -o "$ln" = "/data/media" ];then
+				blockDevs+=("${ln#/dev/}")
+			fi
+		done < <(df | awk '{print $1}')
+	else
+		for f in /dev/block/*;do
+			l="`readlink -f $f`"
+			if [ -b "$l" -a "${l:0:5}" = "/dev/" ];then
+				blockDevs+=("${l#/dev/}")
+			fi
+		done
+	fi
+	if [ -z "$blockDevs" ];then
+		_get_block_devs /dev
+	fi
+	dbv ${blockDevs[@]}
+	d=$(realpath $1)
+	if [ "$d" = "/" ];then
+		err "cannot use rm_all to '/'"
+		return 1
+	fi
+	dlen=${#d}
+	dlen=$((dlen + 1))
+	cat /proc/mounts|awk '{print $2}'| sed -n '1!G;h;$p' |while read ln;do
+		if [ "${ln:0:$dlen}" = "$d/" ];then
+			if ! umount $ln;then
+				err "cannot unmount '$ln'"
+				return 1
+			fi
+		fi
+	done
+	local lnLen1
+	local fsType
+	local b
+	local doRm
+	local dln
+	cat /proc/mounts|awk '{print $2 " " $1}'| sed -n '1!G;h;$p' |while read ln;do
+		dln="`echo $ln | awk '{print $1}'`"
+		lnLen1=$((${#dln} + 1))
+		if [ "${d:0:$lnLen1}" = "$dln/" -o "$d" = "$dln" -o "$dln" = "/" ];then
+			fsType="`echo $ln | awk '{print $2}'`"
+			dbv $fsType
+			if [ "$fsType" = "overlay" ];then
+				doRm=1
+			else
+				if [ "${fsType:0:5}" = "/dev/" ];then
+					if [ ! -d "/data/data/com.termux/files" ];then
+						fsType="`readlink -f \"$fsType\"`"
+					fi
+					for b in ${blockDevs[@]}; do
+						if [ "$b" = "${fsType#/dev/}" ];then
+							doRm=1
+							break
+						fi
+					done
+				elif [ -d "/data/data/com.termux/files" -a $fsType = "/data/media" ];then
+					doRm=1
+				fi
+			fi
+			if [ -z "$doRm" ];then
+				if [ "`stat -f -c '%T' "$d"`" = ramfs ];then
+					doRm=1
+				fi
+			fi
+			if [ -n "$doRm" ];then
+				if [ -e $R/bin/rm ];then
+					$R/bin/rm --one-file-system -rf "$d"
+				elif [ -e $R/usr/bin/rm ];then
+					$R/usr/bin/rm --one-file-system -rf "$d"
+				fi
+			else
+				err "cannot delete '$d'"
+				return 1
+			fi
+			break
+		fi
+	done
+}
+
+
+rm_all(){
+	if [ -d "/data/data/com.termux/files" ]; then
+		IS_TERMUX=1
+	fi
+	if [ -z "$IS_TERMUX" -a ! -d /dev/block ];then
+		err "rm_all: directory, '/dev/block' is missing"
+		return 1
+	fi
+	if ! cat /proc/mounts >/dev/null 2>&1;then
+		err "rm_all: cannot read /proc/mounts"
+		return 1
+	fi
+	local f
+	for f in $@;do
+		_rm_all "$f"
+	done
+}
+
+declare -A LOCAL_FUNC_IDS
+declare -A LOCAL_FUNC_EACH
+
+function local_fun(){
+	if [ "$#" = 0 ];then
+		die "local_def: missing argument"
+	fi
+	if [ -z "${LOCAL_FUNC_IDS[${FUNCNAME[2]}]}" ];then
+		LOCAL_FUNC_IDS[${FUNCNAME[2]}]=${FUNCNAME[2]}_$RANDOM$RANDOM$RANDOM
+	fi
+	local fName=${LOCAL_FUNC_IDS[${FUNCNAME[2]}]}_$1
+	dbv $@
+	shift
+	if [ -z "${LOCAL_FUNC_EACH[$fName]}" ] ;then
+		dbv
+		LOCAL_FUNC_EACH[$fName]=1
+		dbv $fName
+		eval 'function '$fName"(){
+			$(while read -r ln;do
+				echo -E $ln
+			done)
+		}"
+	fi
+	dbv
+}
+
+
+function local_call(){
+	if [ "$#" = 0 ];then
+		die "local_call: missing argument"
+	fi
+	if [ -z "${LOCAL_FUNC_IDS[${FUNCNAME[2]}]}" ];then
+		die "local_call: local function, '$1' in '${FUNCNAME[2]}]' not defined"
+	fi
+	local fName=${LOCAL_FUNC_IDS[${FUNCNAME[2]}]}_$1
+	shift
+	$fName "$@"
+}
+
+
+function revParenths(){
+	for ((i=0; i<${#1}; i++)); do
+		local c="${1:$i:1}"
+		case "$c" in
+			"[")
+				echo -n ']'
+				;;
+			']')
+				echo -n '['
+				;;
+			'(')
+				echo -n ')'
+				;;
+			')')
+				echo -n '('
+				;;
+			'{')
+				echo -n '}'
+				;;
+			'}')
+				echo -n '{'
+				;;
+			'<')
+				echo -n '>'
+				;;
+			'>')
+				echo -n '<'
+				;;
+			*)
+				echo -n $c
+				;;
+		esac
+	done
+}
+
+
+function join(){
+	local sep=$1
+	local i
+	shift
+	local ret=$1
+	shift
+	for i in "$@";do
+		ret="$ret$sep$i"
+	done
+	echo -nE "$ret"
+}
+
+
+function joinopt(){
+	local opt=$1
+	shift
+	local sep=$1
+	local i
+	shift
+	local ret=$1
+	shift
+	for i in "$@";do
+		ret="$ret$sep$i"
+	done
+	if [ -n "$ret" ];then
+		ret="$opt$ret"
+	fi
+	echo -n $ret
+}
+
+
+function joinq(){
+	local sep=$1
+	local i
+	shift
+	local quot=$1
+	local rquot=$(revParenths "$1")
+	shift
+	local ret=$quot$1$rquot
+	shift
+	for i in "$@";do
+		ret="$ret$sep$quot$i$rquot"
+	done
+	echo -n $ret
+}
+
+
+function detect(){
+	local i
+	eval '
+		for i in "${'$1'[@]}"; do
+			if [ "$i" = "'$2'" ]; then
+				return 0
+			fi
+		done
+	'
+	return 1
+}
+
+
+function detect_if(){
+	eval '
+		for '$2' in "${'$1'[@]}"; do
+			if '$3'; then
+				return 0
+			fi
+		done
+		'$2'=""
+	'
+	return 1
+}
+
+
+SOURCES_LOADED=()
+declare -A FUNC_SOURCE
+
+
+require(){
+	dbv $@
+	dbv `caller`
+	if [ -n "$REQUIRE_INVALID" ];then
+		return 0
+	fi
+	local requireFunc
+	local requireSource
+	if [ -n $LOAD_PATH ];then
+		local LOAD_PATH="$LOAD_PATH:$(__CMD_DIR__):$R/usr/share/bashlib_y"
+	else
+		local LOAD_PATH="$(__CMD_DIR__):$R/usr/share/bashlib_y"
+	fi
+	dbv $0
+	dbv $(__CMD_PATH__)
+	dbv $LOAD_PATH
+	local to_load
+	local ret=255
+	while (( "$#" )); do
+		dbv $@
+		case "$1" in
+			"-f")
+				requireFunc=1
+				;;
+			"-s")
+				requireSource=1
+				;;
+			*)
+				if [ -n "$requireFunc" ];then
+					if declare -F "${1#**/}" > /dev/null ;then
+						shift
+						continue
+					fi
+				fi
+				if [ "${1:0:1}" != "/" ];then
+					local parr
+					split parr "$LOAD_PATH" :
+					local p
+					if detect_if parr p '[ -e "$p/'$1'" ] && ! [[ `readlink -f "$p/'$1'"` =~ /bashlib_y$ ]]';then
+						to_load="$p/$1"
+					else
+						dbv $1
+						dbv ${SOURCES_LOADED[@]}
+						if ! detect_if SOURCES_LOADED s '[ "${s##*/}" = '$1' ]';then
+							die "'$1' not found in LOAD_PATH"
+						else
+							shift
+							continue
+						fi
+					fi
+				else
+					to_load="$1"
+				fi
+				to_load="$(readlink -f "$to_load")"
+				if [ -n "$requireSource" ];then
+					dbv $PATH
+					dbv `pwd`
+					dbv loading source "$to_load"
+					emerge_file_content "$to_load"
+				fi
+				if detect SOURCES_LOADED "$to_load";then
+					shift
+					continue
+				fi
+				SOURCES_LOADED+=("$to_load")
+				local funcs="$(declare -F)"
+				local ln
+				local lno
+				if [ -e "$to_load" ];then
+					dbv $to_load
+					if [ -n "$DEBUG" -a "$(stat -f -c '%T' /)" != "ramfs"  ]; then
+						source <(
+							lno=1
+							IFS=
+							while read -r ln; do
+								if [[ $ln =~ ^([\ \	]*dbv)([\ \	]+(.*)|)$ ]];then
+									echo -E "${BASH_REMATCH[1]}" --position "\"${to_load##*/}:$lno\"" --caption "'${BASH_REMATCH[3]}'" ${BASH_REMATCH[3]}
+								else
+									echo -E "$ln"
+								fi
+								#echo -E "$ln" >&2
+								((++lno))
+							done < "$to_load"
+						)
+						ret=$?
+					else
+						source "$to_load"
+						ret=$?
+					fi
+					dbv $to_load $ret
+				else
+					info "'$to_load' is not readable."
+					dbv `ls -la $to_load`
+					source "$to_load"
+					ret=$?
+					if [ "$ret" != "0" ];then
+						error "-r '$to_load', failed."
+					fi
+					dbv $ret
+					#die "cannot require '$to_load'."
+				fi
+				for f in `(echo -E "$funcs"; declare -F) | sort | uniq -u | awk '{print $3}'`; do
+					#dbv FUNC_SOURCE["$f"]="$to_load"
+					dbv $f
+					FUNC_SOURCE["$f"]="$to_load"
+				done
+				if [ -n "$requireFunc" ];then
+					if ! declare -F "${1#**/}" > /dev/null ;then
+						die "function '$1', not found in any files of (\$LOAD_PATH)/$1."
+					fi
+				fi
+				;;
+		esac
+		shift
+	done
+	return $ret
+}
+
+
+cleanup (){
+	dbv `ls -A $SCRIPT_TMP_DIR`
+	if [ -z "$DEBUG" ];then
+		rm_all $SCRIPT_TMP_DIR
+		local k
+#		for k in "${SSH_PARAM_LIST[@]}"; do
+#			if [ -n "$k" ];then
+#				ssh "${SSH_PARAM_LIST[$k]}" <<END
+#					rm_all $SCRIPT_TMP_DIR
+#END
+#			fi
+#		done
+	fi
+	if [[ "$DEBUG" =~ erase|ERASE|delete|DELETE ]];then
+		rm_all $SCRIPT_TMP_DIR/..
+		for k in "${SSH_PARAM_LIST[@]}"; do
+			if [ -n "$k" ];then
+				ssh "${SSH_PARAM_LIST[$k]}" <<END
+					rm_all $SCRIPT_TMP_DIR/..
+END
+			fi
+		done
+	fi
+}
+
+trap_int(){
+	echo
+	warn "interrupted."
+	exit 1
+}
+
+trap cleanup EXIT
+trap trap_int INT
+
+
+ask_yes_no_color(){
+	eval "__ask_yes_no_color_caption=\"$1\""
+	eval "__ask_yes_no_color_yn=\"$2\""
+}
+
+function ask_yes_no {
+	local tty
+	if [ -t 2 ];then
+		tty="`readlink -f /proc/self/fd/2`"
+	else
+		return 1
+	fi
+	if [ -n "$1" ];then
+		"$__ask_yes_no_color_caption"_n "$1 " >&2
+		"$__ask_yes_no_color_yn"_n "[y/n]: " >&2
+	fi
+	dbv $ASK_YES_NO
+	case "$ASK_YES_NO" in
+		[Yy]*)
+			echo $ASK_YES_NO >&2
+			dbv
+			return 0
+			;;
+		[Nn]*)
+			echo $ASK_YES_NO >&2
+			dbv
+			return 1
+			;;
+	esac
+	local ANS
+	dbv
+	while true; do
+		read ANS < $tty
+		case $ANS in
+			[Yy]*)
+				return 0
+				;;  
+			[Nn]*)
+				return 1
+				;;
+			*)
+				;;
+		esac
+	done
+}
+
+
+pqlist(){
+	local i
+	eval "
+		second=0
+		for i in \${$1[@]}; do
+			if [ \$second = 1 ];then
+				echo -n ", "
+			fi
+			echo -n \"'\"\$i\"'\"
+			second=1
+		done
+"
+}
+
+
+function which_dev_on {
+	local ret=$(df "$1" | tail -1 | awk '{print $1}')
+	if [ "$ret" = "none" ];then
+		ret="$(stat -f -c '%T' "$1")"
+	fi
+	echo $ret
+}
+
+
+_d_id(){
+	echo `stat -c "%d-%i" -L "$1"`
+}
+
+
+_recursive_path(){
+	local th="$1"
+	shift
+	if [ ! -d "$th" ]; then
+		if [ -e "$th" -o -L "$th" ]; then
+			"$@" "$th"
+		else
+			return 1
+		fi
+	else
+		local did=`_d_id "$th"`
+		dbv $did
+		if [ -z "$did" ];then # missing source
+			return
+		fi
+		if [ "${dstack[$did]}" ];then # cyclic reference
+			return
+		fi
+		"$@" "$th" # check only dir, but not check files in dir
+		local f
+		local dirs
+		local d
+		local IFS=
+		for f in "$th"/*; do
+			if [ -e "$f" ];then
+				if [ -d "$f" ];then
+					dirs+=("$f")
+				else
+					"$@" "$f"
+				fi
+			fi
+		done
+		dstack[$did]=1
+		for d in "${dirs[@]}"; do
+			_recursive_path "$d" "$@"
+		done
+		dstack[$did]=
+	fi
+}
+
+
+recursive_path(){
+	declare -A dstack
+	_recursive_path "$@"
+}
+
+
+else
+	if [ -n "$DEBUG" ];then
+		echo "support lib already initialized ..." >&2
+		declare -p SSH_PARAM_LIST >&2
+	fi
+
+
+fi
+
+dbv ${BASH_SOURCE[@]}
+dbv `declare -p SSH_PARAM_LIST`
+
+if [ "`readlink -f ${BASH_SOURCE[-1]}`" = "$(__FILE_PATH__)" ];then
+	if [ "$(__FILE_NAME__)" = "$(__CMD_NAME__)" ];then
+		if [[ "$1" =~ / ]]; then # with path
+			"$@"
+		else
+			if ! declare -F "$1" >/dev/null; then
+				LOAD_PATH="./:$LOAD_PATH"
+				dbv $LOAD_PATH
+				require "$1"
+			fi
+			"$@"
+		fi
+	else
+		if ! declare -F "$(__CMD_NAME__)" >/dev/null; then
+			require "$(__CMD_NAME__)"
+		fi
+		"$(__CMD_NAME__)" "$@"
+	fi
+fi
+
+
+fi

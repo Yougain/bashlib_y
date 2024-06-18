@@ -1,0 +1,187 @@
+# bash source
+
+function do_install(){
+	dbv $@
+	local to_inst=$1
+	if [ -z "$to_inst" ];then
+		die "missing argument"
+	fi
+	local d
+	shift
+	local newLns
+	local sudo
+	if [ "`id -u`" != 0 ];then
+		sudo=sudo
+	fi
+	function _do_install_each(){
+		dbv $1
+		local d="$1"
+		if [ -n "$d" -a ! -d "$d" ];then
+			if [ -e "$d" ];then
+				die "'$d' is not a directory."
+			else
+				if ! $sudo mkdir -p "$d";then
+					die "cannot create directory, '$d'"
+				fi
+			fi
+		fi
+		if [ "$d" = "/" ];then
+			d=""
+		fi
+		#echo "[ ! -e $d/$SUPPORT_LIB_NAME -o `stat $d/$SUPPORT_LIB_NAME -c %Y` -lt $SUPPORT_LIB_MTIME ]"
+		local do
+		local sLib=$d/usr/share/$SUPPORT_LIB_NAME/$SUPPORT_LIB_NAME
+		if [ ! -e $sLib ]; then
+			do=1
+		else
+			if [ "`stat $sLib -c %Y`" -lt $SUPPORT_LIB_MTIME ];then
+				do=1
+			fi
+		fi
+		dbv $d
+		dbv "${!SCRIPT_FILES[@]}"
+		if [ -n "$do" ];then
+			if ! $sudo mkdir -p $d/usr/share/$SUPPORT_LIB_NAME;then
+				die "cannot create directory, $d/usr/share/$SUPPORT_LIB_NAME"
+			fi
+			echo -E "$SUPPORT_LIB_CONTENT" | $sudo tee $sLib > /dev/null
+			if [ "$?" != 0 ];then
+				die "cannot create file, $sLib"
+			fi
+			$sudo chmod +x $sLib
+			dbv $d
+			dbv ln -sf ../share/$SUPPORT_LIB_NAME/$SUPPORT_LIB_NAME $d/usr/bin/$SUPPORT_LIB_NAME
+			$sudo ln -sf ../share/$SUPPORT_LIB_NAME/$SUPPORT_LIB_NAME $d/usr/bin/$SUPPORT_LIB_NAME
+		fi
+		dbv `ls -la $sLib`
+		dbv `ls -la $d/usr/bin/bashlib_y 2>/dev/null`
+		local from
+		local usrBinCreated
+		if [ "${to_inst:0:1}" = "/" ];then
+			from=$to_inst
+			dbv $from
+		else
+			dbv "${!FUNC_SOURCE[@]}"
+			local s="${FUNC_SOURCE[$to_inst]}"
+			if [ -r "$s" ]; then
+				from="$s"
+				dbv $from
+				echo "#!/bin/bash
+source /usr/share/bashlib_y/bashlib_y
+source /usr/share/bashlib_y/${from##*/}
+
+${to_inst##*/} \$@
+
+" > "$d/usr/bin/${to_inst##*/}"
+				chmod +x "$d/usr/bin/${to_inst##*/}"
+				usrBinCreated=1
+			else
+				dbv ls -la "$DO_INSTALL_PWD"/"$to_inst"
+				if [ ! -n "$DO_INSTALL_PWD" -o ! -e "$DO_INSTALL_PWD"/"$to_inst" ];then
+					if [ ! -e "./$to_inst" ];then
+						if [ ! -e "`__FILE_DIR__`/$to_inst" ];then
+							if [ ! -e "/usr/share/$SUPPORT_LIB_NAME/$to_inst" ];then
+								local f
+								local fn
+								local sid
+								dbv ${!SCRIPT_FILES[@]}
+								for f in ${!SCRIPT_FILES[@]};do
+									if [ "${f##*/}" = "$to_inst" ];then
+										sid="${SCRIPT_FILES["$f"]}"
+										local IFS=""
+										eval 'echo -E "${'$sid'[*]}"' | $sudo tee "$d/usr/share/$SUPPORT_LIB_NAME/$to_inst" > /dev/null
+										dbv "$d/usr/share/$SUPPORT_LIB_NAME/$to_inst"
+										dbv ln -sf "../share/$SUPPORT_LIB_NAME/$SUPPORT_LIB_NAME" "$d/usr/bin/${to_inst##*/}"
+										$sudo ln -sf "../share/$SUPPORT_LIB_NAME/$SUPPORT_LIB_NAME" "$d/usr/bin/${to_inst##*/}"
+										return 0
+									fi
+								done
+								dbv ${!FUNC_SOURCE[@]}
+								for fn in ${!FUNC_SOURCE[@]}; do
+									if [ "$fn" = "$to_inst" ];then
+										dbv $fn $to_inst
+										f="${FUNC_SOURCE[$to_inst]}"
+										dbv $f
+										if [ -n "$f" ];then
+											sid="${SCRIPT_FILES["$f"]}"
+											dbv $sid
+											if [ -n "$sid" ];then
+												local IFS=""
+												eval 'echo -E "${'$sid'[*]}"'  | $sudo tee "$d/usr/share/$SUPPORT_LIB_NAME/${f##*/}" > /dev/null
+												chmod -x "$d/usr/share/$SUPPORT_LIB_NAME/${f##*/}"
+												echo "#!/bin/bash
+	if [ -e ./bashlib_y ];then
+		source ./bashlib_y
+	else
+		source /usr/share/bashlib_y/bashlib_y
+	fi
+	if [ -e ./${f##*/} ];then
+		source ./${f##*/}
+	else
+		source /usr/share/bashlib_y/${f##*/}
+	fi
+
+	$fn \$@
+
+	" > "$d/usr/bin/${to_inst##*/}"
+												chmod +x "$d/usr/bin/${to_inst##*/}"
+												return 0
+											fi
+										fi
+										break
+									fi
+								done
+								die "'$to_inst' is found neither in current directory nor in directory, '/usr/share/$SUPPORT_LIB_NAME', nor in directory, '`__FILE_DIR__`'"
+							else
+								from="/usr/share/$SUPPORT_LIB_NAME/$to_inst"
+								dbv $from
+							fi
+						else
+							from="`__FILE_DIR__`/$to_inst"
+							dbv $from
+						fi
+					else
+						from="./$to_inst"
+						dbv $from
+					fi
+				else
+					from="$DO_INSTALL_PWD"/"$to_inst"
+					dbv $from
+				fi
+			fi
+		fi
+		local sCmd="$d/usr/share/$SUPPORT_LIB_NAME/${from##*/}"
+		do=
+		if [ ! -e "$sCmd" ];then
+			do=1
+		else
+			if [ "`readlink -f "$from"`" = "`readlink -f "$sCmd"`" ];then
+				deb "'$from' and '$sCmd' is a same file."
+				return 1
+			fi
+			if [ "`stat "$from" -c %Y`" -lt "`stat "$sCmd" -c %Y`" ];then
+				do=1
+			fi
+		fi
+		if [ -n "$do" ];then
+			dbv $from
+			$sudo cp -av "$from" "$sCmd"
+			if [ "${from##*/}" != "$SUPPORT_LIB_NAME" ];then
+				chmod -x "$sCmd"
+			fi
+			if [ -z "$usrBinCreated" ];then
+				dbv $sudo ln -sf "../share/$SUPPORT_LIB_NAME/$SUPPORT_LIB_NAME" "$d/usr/bin/${to_inst##*/}"
+				$sudo ln -sf "../share/$SUPPORT_LIB_NAME/$SUPPORT_LIB_NAME" "$d/usr/bin/${to_inst##*/}"
+			fi
+		fi
+	}
+	if [ ${#@} = 0 ];then
+		_do_install_each /
+	else
+		for d in "$@"; do
+			_do_install_each "$d"
+		done
+	fi
+}
+
+
