@@ -1,6 +1,7 @@
 #!/bin/env bash
 
 
+
 if [ -d "/data/data/com.termux/files" ]; then
 	IS_TERMUX=1
 	R="/data/data/com.termux/files/usr"
