@@ -14,7 +14,7 @@ fi
 T="$R/tmp"
 VT="$R/var/tmp"
 
-if ! [[ "$PATH" =~ (^|:)$R/usr/share/bashlib_y($|:) ]];then
+if ! [[ $PATH =~ (^|:)$R/usr/share/bashlib_y($|:) ]];then
 	export PATH="$R/usr/share/bashlib_y:$PATH"
 fi
 
