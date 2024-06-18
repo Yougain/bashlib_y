@@ -28,7 +28,7 @@ for f in `ls`; do
 	elif [ $f != README.md ]; then
 		FL=`head -1 $f`
 		if [[ $FL =~ ^\#[\ \t]*bash ]];then
-			$SUDO mkdir -p /usr/share/bashlib_y
+			$SUDO mkdir -p $R/usr/share/bashlib_y
 			mkl /usr/share/bashlib_y
 		fi
 	fi
