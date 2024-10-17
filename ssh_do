@@ -83,15 +83,10 @@ function ssh_param(){
 	if [ $? != 255 ];then
 		dbv
 		if [ -n "`grep -E 'mux_client_request_session: master session id:' $SCRIPT_TMP_DIR/test_ssh`" ];then
-			dbv `ls ~/.ssh/mux-rancher@$host:$prt`
-			if [ -n "`ls ~/.ssh/mux-rancher@$host:$prt`" ];then
+			if ssh -O check -p $prt $host
 				dbv
 				SSH_PORT=$prt
 				SSH_PORT_OPT=" -p $SSH_PORT"
-				SSH_HOST_IP=$host
-			else
-				SSH_PORT=" "
-				SSH_PORT_OPT=" "
 				SSH_HOST_IP=$host
 				return 0
 			fi
