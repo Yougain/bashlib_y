@@ -281,7 +281,7 @@ tmp_dir(){
 		fi
 	elif [ -n "$IS_TERMUX" -a -n "$SUDO_USER" ];then
 		chown -R "$SUDO_USER" $SCRIPT_TMP_DIR
-		chown -R "$SUDO_USER" $SCRIPT_TMP_DIR
+		chown -R "$SUDO_USER" $SCRIPT_VAR_DIR
 	fi
 	local lnk=$SCRIPT_TMP_DIR/../latest
 	if [ -n "$DEBUG" ];then
