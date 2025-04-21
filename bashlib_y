@@ -728,6 +728,13 @@ _rm_all(){
 							break
 						fi
 					done
+					if [ -n "$WSL_INTEROP" ]; then
+						if [ "${fsType:0:7}" = "/dev/sd" ];then
+							doRm=1
+						fi
+					fi
+				elif [ -n "$WSL_INTEROP" ] && [[ ${fsType:0:2} =~ [A-Z]: ]];then
+					doRm=1
 				elif [ -d "/data/data/com.termux/files" -a $fsType = "/data/media" ];then
 					doRm=1
 				fi
@@ -1244,3 +1251,36 @@ fi
 
 
 fi
+
+
+pkg_install(){
+	local IST
+	local DVP
+	if [ -f /bin/dnf -o -f /usr/bin/dnf ];then
+		IST=`which dnf`
+		DVP="devel"
+	else
+		if [ -f /bin/yum -o -f /usr/bin/yum ];then
+			IST="wchich yum"
+			DVP="devel"
+		else
+			if [ -f /bin/apt -o -f /usr/bin/apt ];then
+				IST="which apt"
+				DVP="dev"
+			else
+				die "Package installer not found."
+			fi
+		fi
+	fi
+	local all
+	for i in $@; do
+		if [[ "$i" == *"-dev" ]]; then
+			i="${i#-dev}-$DVP"
+		fi
+		if [[ "$i" == *"-devel" ]]; then
+			i="${i#-dev}-$DVP"
+		fi
+		all+=($i)
+	done
+	sudo $IST -y install ${all[@]}
+}
