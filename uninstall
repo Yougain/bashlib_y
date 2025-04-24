@@ -6,7 +6,7 @@ if [ "${PWD}" != "$HOME/git_project/bashlib_y" ];then
 	exit
 fi
 
-if [ -d /data/data/com.termux/files ];then
+if [ -d /data/data/com.termux/files -a ! -r / ];then
 	R=/data/data/com.termux/files
 	SUDO=
 else

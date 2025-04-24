@@ -222,7 +222,7 @@ function ssh_do(){
 			local ln
 			write_env_file << '			__INNER'
 				#!/bin/bash
-				if [ -d "/data/data/com.termux/files" ]; then
+				if [ -d "/data/data/com.termux/files" -a ! -r / ]; then
 					RS="/data/data/com.termux/files/usr"
 					if [ "`stat -c "%i" $RS`" != "`stat -c "%i" $RS/usr`" ];then
 						sudo mount --bind $RS $RS/usr
@@ -323,7 +323,7 @@ function ssh_do(){
 		((++resPrefLen1))
 		local res
 		cat $SCRIPT_TMP_DIR/$SSH_ID/main | "${CMD[@]}" bash -c '"
-				if [ -d /data/data/com.termux/files ]; then
+				if [ -d /data/data/com.termux/files -a ! -r / ]; then
 					mkdir -p /data/data/com.termux/files/usr/'$SCRIPT_TMP_DIR/$SSH_ID';
 					tee /data/data/com.termux/files/usr/'$SCRIPT_TMP_DIR/$SSH_ID'/main >/dev/null; 
 					chmod +x /data/data/com.termux/files/usr/'$SCRIPT_TMP_DIR/$SSH_ID'/main ;
@@ -424,7 +424,7 @@ function install_ssh_key(){
 
 function ssh_reboot(){
 	ssh_sudo <<'END'
-		if [ -d "/data/data/com.termux/files" ]; then
+		if [ -d "/data/data/com.termux/files" -a ! -r / ]; then
 			RS="/data/data/com.termux/files/usr"
 			if [ "`stat -c "%i" $R`" != "`stat -c "%i" $R/usr`" ];then
 				sudo mount --bind $R $R/usr
@@ -443,7 +443,7 @@ END
 	wait_sshd_start
 	echo try ssh connect
 	ssh_sudo <<'END'
-		if [ -d "/data/data/com.termux/files" ]; then
+		if [ -d "/data/data/com.termux/files" -a ! -r / ]; then
 			RS="/data/data/com.termux/files/usr"
 			if [ "`stat -c "%i" $R`" != "`stat -c "%i" $R/usr`" ];then
 				sudo mount --bind $R $R/usr
