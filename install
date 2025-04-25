@@ -1,38 +1,21 @@
 #!/bin/env bash
 
-PWD=`pwd`
-if [ "${PWD}" != "$HOME/git_project/bashlib_y" ];then
-	echo "FATAL: Current directory is not '~/git_project/${PWD##*/}'."
-	exit
-fi
+. gy_spport
 
-if [ -d /data/data/com.termux/files -a ! -r / ];then
-	R=/data/data/com.termux/files
-	SUDO=
-else
-	R=
-	SUDO="sudo"
-fi
 
-mkl(){
-	if [ ! -e "$R$1/$f" -a ! -L "$R$1/$f" ];then
-		$SUDO ln -vs "$PWD/$f" $R$1
-	else
-		echo " "$R$1/$f already exists.
-	fi
-}
 
 for f in `ls`; do
 	if [ -x ./$f ]; then
-		mkl /usr/bin
+		install $f
 	elif [ $f != README.md ]; then
 		FL=`head -1 $f`
 		if [[ $FL =~ ^\#[\ \t]*bash ]];then
-			$SUDO mkdir -p $R/usr/share/bashlib_y
-			mkl /usr/share/bashlib_y
+			install $f /usr/share/bashlib_y
 		fi
 	fi
 done
+
+
 
 
 
