@@ -1,6 +1,6 @@
 #!/bin/env bash
 
-. gy_spport
+. gy_support
 
 
 
